@@ -60,21 +60,21 @@ npx expo run:android
 ## 📱 앱 미리보기
 <p align="center">
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_1.jpg?raw=true" width="30%" />
+/preview/preview_1.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_2.jpg?raw=true" width="30%" />
+/preview/preview_2.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_3.jpg?raw=true" width="30%" />
+/preview/preview_3.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_4.jpg?raw=true" width="30%" />
+/preview/preview_4.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/mabinote/blob/main//drip-coffee-timer
-/assests/preview/preview_5.jpg?raw=true" width="30%" />
+/preview/preview_5.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_6.jpg?raw=true" width="30%" />
+/preview/preview_6.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_7.jpg?raw=true" width="30%" />
+/preview/preview_7.jpg?raw=true" width="30%" />
   <img src="https://github.com/Arkaltale/drip-coffee-timer
-/assests/preview/preview_8.jpg?raw=true" width="30%" />
+/preview/preview_8.jpg?raw=true" width="30%" />
 </p>
 ---
 
