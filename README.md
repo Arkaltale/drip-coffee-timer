@@ -1,6 +1,7 @@
 # ☕ 드립 타이머
 
 > 드립 커피 레시피 타이머 & 브루잉 로그 앱
+> 
 > 나만의 레시피를 만들고, 단계별 타이머로 정밀 추출하며, 결과를 기록하는 모바일 유틸리티
 
 ---
@@ -59,23 +60,22 @@ npx expo run:android
 ---
 ## 📱 앱 미리보기
 <p align="center">
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_1.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_2.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_3.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_4.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/mabinote/blob/main//drip-coffee-timer
-/preview/preview_5.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_6.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_7.jpg?raw=true" width="30%" />
-  <img src="https://github.com/Arkaltale/drip-coffee-timer
-/preview/preview_8.jpg?raw=true" width="30%" />
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_1.jpg?raw=true" width="30%" />
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_2.jpg?raw=true" width="30%" />
 </p>
+<p align="center">
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_3.jpg?raw=true" width="30%" />
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_4.jpg?raw=true" width="30%" />
+</p>
+<p align="center">
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_5.jpg?raw=true" width="30%" />
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_6.jpg?raw=true" width="30%" />
+</p>
+<p align="center">
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_7.jpg?raw=true" width="30%" />
+  <img src="https://github.com/Arkaltale/drip-coffee-timer/blob/main/preview/preview_8.jpg?raw=true" width="30%" />
+</p>
+
 ---
 
 ## 📄 라이선스
