@@ -1,21 +1,24 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
-import { addRecipe, Recipe } from '../db';
-import { FontAwesome } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { FontAwesome } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { addRecipe, Recipe } from '../db';
+
+type StepForm = {
+  instruction: string;
+  duration: string;
+  waterAmount: string;
+};
+
 type RecipeFormData = {
   name: string;
   bean: string;
   grinder: string;
   dripper: string;
   grindSize: string | number;
-  steps: {
-    instruction: string;
-    duration: string | number;
-    waterAmount: string | number;
-  }[];
+  steps: StepForm[];
 };
 
 export default function CreateRecipeScreen() {
@@ -30,13 +33,12 @@ export default function CreateRecipeScreen() {
     steps: [{ instruction: '', duration: '', waterAmount: '' }] 
   });
 
-  const handleMainInfoChange = (field: keyof RecipeFormData, value: string | number) => {
+  const handleMainInfoChange = (field: keyof Omit<RecipeFormData, 'steps'>, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleStepChange = (index: number, field: keyof Recipe['steps'][0], value: string | number) => {
+  const handleStepChange = (index: number, field: keyof StepForm, value: string) => {
     const newSteps = [...formData.steps];
-    // @ts-ignore
     newSteps[index][field] = value;
     setFormData(prev => ({ ...prev, steps: newSteps }));
   };
@@ -157,7 +159,7 @@ export default function CreateRecipeScreen() {
           <View style={styles.stepsHeader}>
             <Text style={[styles.label, { color: colors.text }]}>추출 단계</Text>
             <Pressable onPress={addStep} style={styles.addStepButton}>
-              <Text style={styles.addStepButtonText}>단계 추가</Text>
+              <Text style={[styles.addStepButtonText, { color: colors.text }]}>단계 추가</Text>
             </Pressable>
           </View>
 
@@ -172,7 +174,7 @@ export default function CreateRecipeScreen() {
               />
               <TextInput
                 style={[styles.input, styles.stepInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                value={step.duration.toString()}
+                value={step.duration}
                 onChangeText={(text) => handleStepChange(index, 'duration', text)}
                 placeholder="시간(초)"
                 keyboardType="numeric"
@@ -180,7 +182,7 @@ export default function CreateRecipeScreen() {
               />
               <TextInput
                 style={[styles.input, styles.stepInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.text }]}
-                value={step.waterAmount.toString()}
+                value={step.waterAmount}
                 onChangeText={(text) => handleStepChange(index, 'waterAmount', text)}
                 placeholder="물 양(g)"
                 keyboardType="numeric"
@@ -205,35 +207,29 @@ export default function CreateRecipeScreen() {
 const styles = StyleSheet.create({
   flexContainer: {
     flex: 1,
-    backgroundColor: '#fff',
   },
-  container: { flex: 1, padding: 10, backgroundColor: '#fff' },
+  container: { flex: 1, padding: 10 },
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
   },
   label: { fontSize: 16, fontWeight: 'bold', marginTop: 20, marginBottom: 8 },
   input: {
-    backgroundColor: '#f5f5f5',
     padding: 15,
     borderRadius: 8,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#eee',
   },
   stepsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  addStepButton: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#eef', borderRadius: 8 },
-  addStepButtonText: { color: '#44f', fontWeight: 'bold' },
+  addStepButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
+  addStepButtonText: { fontWeight: 'bold' },
   stepContainer: {
     padding: 15,
     borderRadius: 8,
-    backgroundColor: '#f9f9f9',
     marginBottom: 10,
-    borderColor: '#ddd',
     borderWidth: 1,
   },
   stepInput: {
-    backgroundColor: '#fff',
     marginBottom: 10,
   },
   removeButton: {
@@ -244,11 +240,8 @@ const styles = StyleSheet.create({
   saveButtonContainer: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#fff',
   },
   saveButton: {
-    backgroundColor: '#A47551',
     padding: 20,
     borderRadius: 10,
     alignItems: 'center',

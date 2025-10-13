@@ -1,10 +1,12 @@
-import { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, Switch, Pressable, Modal, TouchableOpacity } from 'react-native';
-import { Link, Stack, useFocusEffect } from 'expo-router';
-import { getLogs, BrewingLog, LogSortOption, Recipe, getRecipes } from '../../db';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/ThemeContext';
+import { formatDate } from '@/utils/date';
 import { FontAwesome } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
+import { Link, Stack, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { BrewingLog, LogSortOption, Recipe, getLogs, getRecipes } from '../../db';
 
 const StarDisplay = ({ rating }: { rating: number }) => {
   return (
@@ -60,8 +62,8 @@ export default function MyLogScreen() {
           <View>
             <Text style={[styles.logTitle, { color: colors.text }]}>{item.recipe_name}</Text>
             <Text style={[styles.logSubtitle, { color: colors.subtext }]}>{item.bean}</Text>
-            <Text style={[styles.logInfo, { color: colors.subtext }]}>
-              {new Date(item.created_at).toLocaleDateString()}
+            <Text style={[styles.logInfo, { color: colors.subtext }]}> 
+              {formatDate(item.created_at)}
             </Text>
           </View>
           {item.rating ? <StarDisplay rating={item.rating} /> : null}
@@ -115,10 +117,12 @@ export default function MyLogScreen() {
         </TouchableOpacity>
       </View>
       {logs.length > 0 ? (
-        <FlatList
+        <FlashList
           data={logs}
           renderItem={renderItem}
-          keyExtractor={item => item.id.toString()}
+          extraData={colors}
+          keyExtractor={(item: BrewingLog) => item.id.toString()}
+          estimatedItemSize={80}
           contentContainerStyle={{ padding: 20 }}
         />
       ) : (
@@ -144,7 +148,7 @@ export default function MyLogScreen() {
               </TouchableOpacity>
             ))}
             <Pressable style={styles.closeButton} onPress={() => setFilterModalVisible(false)}>
-              <Text style={styles.closeButtonText}>닫기</Text>
+              <Text style={[styles.closeButtonText, { color: colors.text }]}>닫기</Text>
             </Pressable>
           </View>
         </View>
@@ -210,5 +214,5 @@ const styles = StyleSheet.create({
   modalItem: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
   modalItemText: { fontSize: 18, textAlign: 'center' },
   closeButton: { marginTop: 20, padding: 10 },
-  closeButtonText: { fontSize: 16, color: '#aaa', textAlign: 'center' },
+  closeButtonText: { fontSize: 16, textAlign: 'center' },
 });

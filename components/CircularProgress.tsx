@@ -1,10 +1,11 @@
+import { useTheme } from '@/context/ThemeContext';
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedProps,
-  withTiming,
   Easing,
+  useAnimatedProps,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, G } from 'react-native-svg';
 
@@ -22,9 +23,10 @@ export default function CircularProgress({
   size,
   strokeWidth,
   progress,
-  backgroundColor = '#e6e6e6',
-  progressColor = '#A47551',
+  backgroundColor,
+  progressColor,
 }: CircularProgressProps) {
+  const { colors } = useTheme();
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
 
@@ -49,7 +51,7 @@ export default function CircularProgress({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={backgroundColor}
+            stroke={backgroundColor ?? (colors.border || '#e6e6e6')}
             strokeWidth={strokeWidth}
             fill="transparent"
           />
@@ -57,7 +59,7 @@ export default function CircularProgress({
             cx={size / 2}
             cy={size / 2}
             r={radius}
-            stroke={progressColor}
+            stroke={progressColor ?? colors.primary}
             strokeWidth={strokeWidth}
             fill="transparent"
             strokeDasharray={circumference}

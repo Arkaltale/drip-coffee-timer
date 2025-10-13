@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "drip-coffee-timer",
+    "name": "드립 타이머",
     "slug": "drip-coffee-timer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,7 +22,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.dripcoffeetimer"
     },
     "web": {
       "bundler": "metro",

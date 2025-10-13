@@ -1,6 +1,7 @@
-import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
+import React from 'react';
+import { Switch } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 
 export function TabBarIcon(props: {
@@ -11,7 +12,7 @@ export function TabBarIcon(props: {
 }
 
 export default function TabLayout() {
-  const { colors } = useTheme();
+  const { colors, isDarkMode, toggleTheme } = useTheme();
 
   return (
     <Tabs
@@ -33,6 +34,16 @@ export default function TabLayout() {
         options={{
           title: '레시피',
           tabBarIcon: ({ color }) => <TabBarIcon name="coffee" color={color} />,
+          headerRight: () => (
+            <Switch
+              trackColor={{ false: "#767577", true: colors.primary }}
+              thumbColor={"#f4f3f4"}
+              ios_backgroundColor="#3e3e40"
+              onValueChange={toggleTheme}
+              value={isDarkMode}
+              style={{ marginRight: 15 }}
+            />
+          ),
         }}
       />
       <Tabs.Screen

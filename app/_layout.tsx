@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
-import { Stack, SplashScreen } from 'expo-router';
-import { useFonts } from 'expo-font';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { initDB } from '../db';
 import { ThemeProvider } from '@/context/ThemeContext';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useFonts } from 'expo-font';
+import { SplashScreen, Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { initDB } from '../db';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,14 +15,18 @@ export default function RootLayout() {
   useEffect(() => {
     initDB();
 
-    if (error) throw error;
+    if (error) {
+      // 폰트 로딩 실패 시에도 앱을 계속 실행합니다.
+      SplashScreen.hideAsync();
+      return;
+    }
 
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, error]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !error) {
     return null;
   }
 

@@ -37,6 +37,7 @@ const db = SQLite.openDatabaseSync('drip_coffee.db');
 
 export const initDB = async () => {
   try {
+    await db.execAsync('PRAGMA foreign_keys = ON;');
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS brewing_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,7 +248,7 @@ export const updateRecipe = async (id: number, recipe: Omit<Recipe, 'id'>) => {
     await db.withTransactionAsync(async () => {
       await db.runAsync(
         'UPDATE recipes SET name = ?, bean = ?, grinder = ?, dripper = ?, grindSize = ?, totalWater = ?, totalTime = ? WHERE id = ?;',
-        [recipe.name, recipe.bean, recipe.grinder, recipe.grindSize, recipe.totalWater, recipe.totalTime, id]
+        [recipe.name, recipe.bean, recipe.grinder, recipe.dripper, recipe.grindSize, recipe.totalWater, recipe.totalTime, id]
       );
 
       await db.runAsync('DELETE FROM recipe_steps WHERE recipe_id = ?;', [id]);

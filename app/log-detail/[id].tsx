@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useTheme } from '../../context/ThemeContext';
-import { getLogById, updateLog, BrewingLog, deleteLog } from '../../db';
+import { formatDate } from '@/utils/date';
 import { FontAwesome } from '@expo/vector-icons';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../context/ThemeContext';
+import { BrewingLog, deleteLog, getLogById, updateLog } from '../../db';
 
 const StarRatingInput = ({ rating, setRating }: { rating: number, setRating: (r: number) => void }) => {
     const { colors } = useTheme();
@@ -86,13 +87,13 @@ export default function LogDetailScreen() {
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             <Stack.Screen
                 options={{
-                    title: new Date(log.created_at).toLocaleDateString() + "의 기록",
+                    title: formatDate(log.created_at) + "의 기록",
                     headerStyle: { backgroundColor: colors.card },
                     headerTitleStyle: { color: colors.text },
                     headerTintColor: colors.text,
                     headerRight: () => (
                         <Pressable onPress={handleDelete}>
-                            <FontAwesome name="trash" size={24} color="#ff4d4d" />
+                            <FontAwesome name="trash" size={24} color={colors.primary} />
                         </Pressable>
                     ),
                 }}
