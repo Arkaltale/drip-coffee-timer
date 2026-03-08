@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, Link } from 'expo-router';
 import { getRecipeById, deleteRecipe, Recipe } from '../../db';
@@ -7,79 +7,123 @@ import { useTheme } from '@/context/ThemeContext';
 
 export default function RecipeDetailScreen() {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMissing, setIsMissing] = useState(false);
   const { colors } = useTheme();
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const recipeId = parseInt(id as string, 10);
+  const rawId = Array.isArray(id) ? id[0] : id;
+  const recipeId = Number(rawId);
 
   useEffect(() => {
-    if (recipeId) {
-      const fetchRecipe = async () => {
-        const data = await getRecipeById(recipeId);
+    let isMounted = true;
+
+    const fetchRecipe = async () => {
+      if (!Number.isInteger(recipeId) || recipeId <= 0) {
+        if (isMounted) {
+          setIsMissing(true);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const data = await getRecipeById(recipeId);
+      if (!isMounted) return;
+
+      if (data) {
         setRecipe(data);
-      };
-      fetchRecipe();
-    }
-  }, [id]);
+        setIsMissing(false);
+      } else {
+        setRecipe(null);
+        setIsMissing(true);
+      }
+      setIsLoading(false);
+    };
+
+    fetchRecipe();
+    return () => {
+      isMounted = false;
+    };
+  }, [recipeId]);
 
   const handleDelete = () => {
+    if (!recipe) return;
+
     Alert.alert(
-      "레시피 삭제",
-      `'${recipe?.name}' 레시피를 정말로 삭제하시겠습니까?`,
+      '레시피 삭제',
+      `'${recipe.name}' 레시피를 정말로 삭제하시겠습니까?`,
       [
         {
-          text: "취소",
-          style: "cancel"
+          text: '취소',
+          style: 'cancel',
         },
         {
-          text: "삭제",
+          text: '삭제',
           onPress: async () => {
             try {
               await deleteRecipe(recipeId);
-              Alert.alert("성공", "레시피가 삭제되었습니다.");
+              Alert.alert('성공', '레시피가 삭제되었습니다.');
               router.back();
             } catch (error) {
-              Alert.alert("오류", "레시피를 삭제하는 중 오류가 발생했습니다.");
+              Alert.alert('오류', '레시피를 삭제하는 중 오류가 발생했습니다.');
             }
           },
-          style: "destructive"
-        }
+          style: 'destructive',
+        },
       ]
     );
   };
 
-
-  if (!recipe) {
+  if (isLoading) {
     return <ActivityIndicator size="large" style={{ flex: 1 }} />;
   }
 
+  if (isMissing || !recipe) {
+    return (
+      <View style={[styles.emptyStateContainer, { backgroundColor: colors.background }]}> 
+        <Stack.Screen
+          options={{
+            title: '레시피 없음',
+            headerStyle: { backgroundColor: colors.card },
+            headerTitleStyle: { color: colors.text },
+            headerTintColor: colors.text,
+          }}
+        />
+        <Text style={[styles.emptyStateText, { color: colors.text }]}>레시피를 찾을 수 없습니다.</Text>
+        <Pressable style={[styles.startButton, { backgroundColor: colors.primary }]} onPress={() => router.back()}>
+          <Text style={styles.startButtonText}>목록으로 돌아가기</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   const startBrewing = () => {
-    router.push(`/timer/${id}`);
+    router.push(`/timer/${recipeId}`);
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen 
-        options={{ 
+      <Stack.Screen
+        options={{
           title: recipe.name,
           headerStyle: { backgroundColor: colors.card },
-          headerTitleStyle: { color: colors.text }, 
+          headerTitleStyle: { color: colors.text },
           headerTintColor: colors.text,
           headerRight: () => (
             <View style={{ flexDirection: 'row', gap: 20 }}>
-                <Link href={`/edit-recipe/${recipeId}`} asChild>
-                    <Pressable> 
-                        <FontAwesome name="pencil" size={24} color={colors.icon} />
-                    </Pressable>
-                </Link>
-                <Pressable onPress={handleDelete}>
-                    <FontAwesome name="trash" size={24} color="#ff4d4d" />
+              <Link href={`/edit-recipe/${recipeId}`} asChild>
+                <Pressable>
+                  <FontAwesome name="pencil" size={24} color={colors.icon} />
                 </Pressable>
+              </Link>
+              <Pressable onPress={handleDelete}>
+                <FontAwesome name="trash" size={24} color="#ff4d4d" />
+              </Pressable>
             </View>
-          )
-        }} 
+          ),
+        }}
       />
-      
+
       <View style={styles.infoContainer}>
         <Text style={[styles.label, { color: colors.text }]}>원두:</Text>
         <Text style={[styles.infoText, { color: colors.subtext }]}>{recipe.bean}</Text>
@@ -94,8 +138,8 @@ export default function RecipeDetailScreen() {
         <Text style={[styles.label, { color: colors.text }]}>드리퍼:</Text>
         <Text style={[styles.infoText, { color: colors.subtext }]}>{recipe.dripper}</Text>
       </View>
-      
-      <View style={[styles.stepsContainer, { borderTopColor: colors.border }]}>
+
+      <View style={[styles.stepsContainer, { borderTopColor: colors.border }]}> 
         <Text style={[styles.stepsTitle, { color: colors.text }]}>브루잉 순서</Text>
         {recipe.steps.map((step, index) => (
           <View key={index} style={styles.stepItem}>
@@ -113,6 +157,16 @@ export default function RecipeDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 20, backgroundColor: '#fff' },
+  emptyStateContainer: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    marginBottom: 20,
+  },
   infoContainer: { flexDirection: 'row', marginBottom: 10 },
   label: { fontSize: 16, fontWeight: 'bold', width: 80 },
   infoText: { fontSize: 16, flex: 1 },

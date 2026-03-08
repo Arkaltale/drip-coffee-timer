@@ -1,4 +1,4 @@
-import { useTheme } from '@/context/ThemeContext';
+﻿import { useTheme } from '@/context/ThemeContext';
 import { FontAwesome } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -30,42 +30,42 @@ export default function CreateRecipeScreen() {
     grinder: '',
     dripper: '',
     grindSize: '',
-    steps: [{ instruction: '', duration: '', waterAmount: '' }] 
+    steps: [{ instruction: '', duration: '', waterAmount: '' }],
   });
 
   const handleMainInfoChange = (field: keyof Omit<RecipeFormData, 'steps'>, value: string | number) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleStepChange = (index: number, field: keyof StepForm, value: string) => {
     const newSteps = [...formData.steps];
     newSteps[index][field] = value;
-    setFormData(prev => ({ ...prev, steps: newSteps }));
+    setFormData((prev) => ({ ...prev, steps: newSteps }));
   };
 
   const addStep = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      steps: [...prev.steps, { instruction: '', duration: '', waterAmount: '' }]
+      steps: [...prev.steps, { instruction: '', duration: '', waterAmount: '' }],
     }));
   };
 
   const removeStep = (index: number) => {
     if (formData.steps.length <= 1) {
-      Alert.alert("알림", "최소 한 개 이상의 단계가 필요합니다.");
+      Alert.alert('알림', '최소 한 개 이상의 단계가 필요합니다.');
       return;
     }
     const newSteps = formData.steps.filter((_, i) => i !== index);
-    setFormData(prev => ({ ...prev, steps: newSteps }));
+    setFormData((prev) => ({ ...prev, steps: newSteps }));
   };
 
   const handleSave = async () => {
     if (!formData.name.trim()) {
-      Alert.alert("오류", "레시피 이름을 입력해주세요.");
+      Alert.alert('오류', '레시피 이름을 입력해주세요.');
       return;
     }
 
-    const stepsWithNumbers = formData.steps.map(step => ({
+    const stepsWithNumbers = formData.steps.map((step) => ({
       ...step,
       duration: Number(step.duration) || 0,
       waterAmount: Number(step.waterAmount) || 0,
@@ -85,9 +85,13 @@ export default function CreateRecipeScreen() {
       totalTime,
     };
 
-    await addRecipe(recipeToSave);
-    Alert.alert("성공", "레시피가 성공적으로 저장되었습니다.");
-    router.back();
+    try {
+      await addRecipe(recipeToSave);
+      Alert.alert('성공', '레시피가 성공적으로 저장되었습니다.');
+      router.back();
+    } catch (error) {
+      Alert.alert('오류', '레시피 저장 중 오류가 발생했습니다.');
+    }
   };
 
   return (
@@ -101,7 +105,7 @@ export default function CreateRecipeScreen() {
         }}
       />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={[styles.flexContainer, { backgroundColor: colors.background }]}
         keyboardVerticalOffset={90}
       >
@@ -194,10 +198,10 @@ export default function CreateRecipeScreen() {
             </View>
           ))}
           <View style={[styles.saveButtonContainer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-          <Pressable style={[styles.saveButton, { backgroundColor: colors.primary }]} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>레시피 저장하기</Text>
-          </Pressable>
-        </View>
+            <Pressable style={[styles.saveButton, { backgroundColor: colors.primary }]} onPress={handleSave}>
+              <Text style={styles.saveButtonText}>레시피 저장하기</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

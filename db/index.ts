@@ -71,6 +71,27 @@ export const initDB = async () => {
         waterAmount INTEGER NOT NULL,
         FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
       );
+
+      CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe_id
+      ON recipe_steps(recipe_id);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_recipe_name
+      ON brewing_logs(recipe_name);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_rating_id
+      ON brewing_logs(rating DESC, id DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_rating_asc_id_desc
+      ON brewing_logs(rating ASC, id DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_recipe_latest
+      ON brewing_logs(recipe_name, id DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_recipe_rating_desc
+      ON brewing_logs(recipe_name, rating DESC, id DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_brewing_logs_recipe_rating_asc
+      ON brewing_logs(recipe_name, rating ASC, id DESC);
     `);
     console.log('모든 테이블이 성공적으로 초기화되었습니다.');
   } catch (error) {
@@ -92,26 +113,22 @@ export const getLogs = async (options: {
   filterByRecipe?: string | null;
 } = {}): Promise<BrewingLog[]> => {
   const { sortBy = 'latest', filterByRecipe = null } = options;
+  const recipeFilter = filterByRecipe?.trim() || null;
 
   let query = 'SELECT * FROM brewing_logs';
   const params: (string | number)[] = [];
 
-  if (filterByRecipe) {
+  if (recipeFilter) {
     query += ' WHERE recipe_name = ?';
-    params.push(filterByRecipe);
+    params.push(recipeFilter);
   }
 
-  switch (sortBy) {
-    case 'rating_desc':
-      query += ' ORDER BY rating DESC, id DESC';
-      break;
-    case 'rating_asc':
-      query += ' ORDER BY rating ASC, id DESC';
-      break;
-    case 'latest':
-    default:
-      query += ' ORDER BY id DESC';
-      break;
+  if (sortBy === 'rating_desc') {
+    query += ' ORDER BY rating DESC, id DESC';
+  } else if (sortBy === 'rating_asc') {
+    query += ' ORDER BY rating ASC, id DESC';
+  } else {
+    query += ' ORDER BY id DESC';
   }
 
   query += ';';
@@ -158,16 +175,36 @@ export const deleteLog = async (id: number) => {
 export const getRecipes = async (): Promise<Recipe[]> => {
   try {
     const recipesResult = await db.getAllAsync<Omit<Recipe, 'steps'>>('SELECT * FROM recipes ORDER BY id DESC;');
-
-    const recipesWithSteps: Recipe[] = [];
-    for (const recipe of recipesResult) {
-      const stepsResult = await db.getAllAsync<RecipeStep>(
-        'SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY id ASC;',
-        [recipe.id!]
-      );
-      recipesWithSteps.push({ ...recipe, steps: stepsResult });
+    if (recipesResult.length === 0) {
+      return [];
     }
-    return recipesWithSteps;
+
+    const recipeIds = recipesResult
+      .map((recipe) => recipe.id)
+      .filter((id): id is number => typeof id === 'number');
+
+    if (recipeIds.length === 0) {
+      return recipesResult.map((recipe) => ({ ...recipe, steps: [] }));
+    }
+
+    const placeholders = recipeIds.map(() => '?').join(', ');
+    const stepsResult = await db.getAllAsync<RecipeStep>(
+      `SELECT * FROM recipe_steps WHERE recipe_id IN (${placeholders}) ORDER BY recipe_id ASC, id ASC;`,
+      recipeIds
+    );
+
+    const stepsByRecipeId = new Map<number, RecipeStep[]>();
+    for (const step of stepsResult) {
+      if (typeof step.recipe_id !== 'number') continue;
+      const currentSteps = stepsByRecipeId.get(step.recipe_id) || [];
+      currentSteps.push(step);
+      stepsByRecipeId.set(step.recipe_id, currentSteps);
+    }
+
+    return recipesResult.map((recipe) => ({
+      ...recipe,
+      steps: typeof recipe.id === 'number' ? (stepsByRecipeId.get(recipe.id) || []) : [],
+    }));
   } catch (error) {
     console.error('레시피 불러오기 오류', error);
     return [];
