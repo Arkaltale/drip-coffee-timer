@@ -1,17 +1,49 @@
-﻿import { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+﻿import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { AppState, AppStateStatus, Platform, View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import { Recipe, RecipeStep, getRecipeById } from '../../db';
 import { Audio } from 'expo-av';
 import { addLog } from '../../db';
 import CircularProgress from '@/components/CircularProgress';
 import { useTheme } from '@/context/ThemeContext';
+import {
+  ensureAndroidTimerNotificationPermission,
+  getAndroidForegroundTimerState,
+  pauseAndroidForegroundTimer,
+  startAndroidForegroundTimer,
+  stopAndroidForegroundTimer,
+  updateAndroidForegroundTimer,
+} from '@/utils/androidTimerService';
+import {
+  cancelIosTimerNotification,
+  scheduleIosTimerCompletionNotification,
+} from '@/utils/iosTimerNotifications';
+import {
+  endIosLiveActivity,
+  isIosLiveActivitySupported,
+  startIosLiveActivity,
+  updateIosLiveActivity,
+} from '@/utils/iosLiveActivity';
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
+
+const getStepIndexFromElapsed = (stepEndTimes: number[], elapsedSeconds: number): number => {
+  if (stepEndTimes.length === 0) return 0;
+
+  for (let i = 0; i < stepEndTimes.length; i += 1) {
+    if (elapsedSeconds < stepEndTimes[i]) {
+      return i;
+    }
+  }
+
+  return stepEndTimes.length - 1;
+};
+
+type TimerState = 'idle' | 'countdown' | 'running' | 'paused';
 
 export default function TimerScreen() {
   const { id } = useLocalSearchParams();
@@ -23,7 +55,6 @@ export default function TimerScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMissing, setIsMissing] = useState(false);
 
-  type TimerState = 'idle' | 'countdown' | 'running' | 'paused';
   const [timerState, setTimerState] = useState<TimerState>('idle');
   const [seconds, setSeconds] = useState(0);
   const [countdown, setCountdown] = useState(3);
@@ -31,7 +62,20 @@ export default function TimerScreen() {
   const [isBrewingFinished, setIsBrewingFinished] = useState(false);
 
   const sound = useRef(new Audio.Sound());
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const previousTimerStateRef = useRef<TimerState>('idle');
+  const previousIosTimerStateRef = useRef<TimerState>('idle');
+  const iosCompletionNotificationIdRef = useRef<string | null>(null);
+  const backgroundedAtMsRef = useRef<number | null>(null);
+  const secondsRef = useRef(0);
+  const iosLiveActivityStartedRef = useRef(false);
+  const iosLiveActivitySupportedRef = useRef<boolean | null>(null);
+
   const { colors } = useTheme();
+
+  useEffect(() => {
+    secondsRef.current = seconds;
+  }, [seconds]);
 
   useEffect(() => {
     let isMounted = true;
@@ -78,6 +122,18 @@ export default function TimerScreen() {
     });
   }, [recipe]);
 
+  const applyElapsedSeconds = useCallback(
+    (elapsedSeconds: number) => {
+      if (!recipe) return;
+
+      const clampedSeconds = Math.max(0, Math.min(recipe.totalTime, elapsedSeconds));
+      setSeconds(clampedSeconds);
+      setCurrentStepIndex(getStepIndexFromElapsed(stepEndTimes, clampedSeconds));
+      setIsBrewingFinished(clampedSeconds >= recipe.totalTime || recipe.steps.length === 0);
+    },
+    [recipe, stepEndTimes]
+  );
+
   const totalWaterPoured = useMemo(() => {
     if (!recipe) return 0;
     if (isBrewingFinished) {
@@ -103,6 +159,40 @@ export default function TimerScreen() {
     return Math.min(elapsedInStep / currentStep.duration, 1);
   }, [seconds, currentStepIndex, recipe]);
 
+  const getStepSummary = useCallback(() => {
+    if (!recipe) return '';
+
+    const totalSteps = Math.max(recipe.steps.length, 1);
+    const stepNumber = Math.min(currentStepIndex + 1, totalSteps);
+    return `단계 ${stepNumber}/${totalSteps}`;
+  }, [recipe, currentStepIndex]);
+
+  const getForegroundSubtitle = useCallback(() => {
+    if (!recipe) return '';
+    if (isBrewingFinished) return '추출 완료';
+    return getStepSummary();
+  }, [recipe, isBrewingFinished, getStepSummary]);
+
+  const syncFromForegroundTimer = useCallback(async () => {
+    if (!recipe || Platform.OS !== 'android') return;
+
+    try {
+      const state = await getAndroidForegroundTimerState();
+      if (!state) return;
+      if (!state.isRunning && !state.isPaused) return;
+
+      const remainingSeconds = Math.ceil(Math.max(0, state.remainingMs) / 1000);
+      const elapsedSeconds = Math.max(0, Math.min(recipe.totalTime, recipe.totalTime - remainingSeconds));
+      applyElapsedSeconds(elapsedSeconds);
+
+      const restoredState: TimerState = state.isRunning ? 'running' : 'paused';
+      previousTimerStateRef.current = restoredState;
+      setTimerState(restoredState);
+    } catch (error) {
+      console.log('Foreground timer sync failed', error);
+    }
+  }, [applyElapsedSeconds, recipe]);
+
   useEffect(() => {
     const loadSound = async () => {
       try {
@@ -117,6 +207,54 @@ export default function TimerScreen() {
       sound.current.unloadAsync();
     };
   }, []);
+
+  useEffect(() => {
+    if (!recipe) return;
+    void syncFromForegroundTimer();
+  }, [recipe, syncFromForegroundTimer]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const previousState = appState.current;
+      const isGoingBackground = nextState === 'inactive' || nextState === 'background';
+
+      if (isGoingBackground && timerState === 'running') {
+        backgroundedAtMsRef.current = Date.now();
+      }
+
+      appState.current = nextState;
+      const wasBackground = previousState === 'inactive' || previousState === 'background';
+
+      if (!wasBackground || nextState !== 'active') {
+        return;
+      }
+
+      if (Platform.OS === 'android') {
+        void syncFromForegroundTimer();
+        return;
+      }
+
+      if (Platform.OS === 'ios' && timerState === 'running' && recipe) {
+        const backgroundedAt = backgroundedAtMsRef.current;
+        backgroundedAtMsRef.current = null;
+
+        if (!backgroundedAt) {
+          return;
+        }
+
+        const elapsedBackgroundSeconds = Math.floor((Date.now() - backgroundedAt) / 1000);
+        if (elapsedBackgroundSeconds <= 0) {
+          return;
+        }
+
+        applyElapsedSeconds(secondsRef.current + elapsedBackgroundSeconds);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [applyElapsedSeconds, recipe, syncFromForegroundTimer, timerState]);
 
   useEffect(() => {
     if (timerState !== 'countdown') return;
@@ -179,6 +317,148 @@ export default function TimerScreen() {
     }
   }, [timerState, recipe, isBrewingFinished, currentStepIndex, stepEndTimes, seconds]);
 
+  useEffect(() => {
+    if (!recipe || Platform.OS !== 'android') return;
+
+    const previousState = previousTimerStateRef.current;
+    if (previousState === timerState) return;
+
+    previousTimerStateRef.current = timerState;
+
+    const syncBackgroundService = async () => {
+      try {
+        if (timerState === 'running') {
+          const granted = await ensureAndroidTimerNotificationPermission();
+          if (!granted) return;
+
+          const remainingMs = Math.max(0, (recipe.totalTime - seconds) * 1000);
+          if (remainingMs <= 0) return;
+
+          await startAndroidForegroundTimer(remainingMs, recipe.name, getForegroundSubtitle());
+          return;
+        }
+
+        if (timerState === 'paused') {
+          await pauseAndroidForegroundTimer();
+          return;
+        }
+
+        if (timerState === 'idle') {
+          await stopAndroidForegroundTimer();
+        }
+      } catch (error) {
+        console.log('Foreground timer bridge error', error);
+      }
+    };
+
+    void syncBackgroundService();
+  }, [timerState, recipe, seconds, getForegroundSubtitle]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !recipe || timerState !== 'running') return;
+
+    void updateAndroidForegroundTimer(recipe.name, getForegroundSubtitle());
+  }, [timerState, recipe, currentStepIndex, isBrewingFinished, getForegroundSubtitle]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !recipe) return;
+
+    let cancelled = false;
+
+    const syncLiveActivity = async () => {
+      if (iosLiveActivitySupportedRef.current === null) {
+        iosLiveActivitySupportedRef.current = await isIosLiveActivitySupported();
+      }
+
+      if (!iosLiveActivitySupportedRef.current) {
+        return;
+      }
+
+      const shouldKeepLiveActivity = (timerState === 'running' || timerState === 'paused') && !isBrewingFinished;
+      if (shouldKeepLiveActivity) {
+        const payload = {
+          title: recipe.name,
+          subtitle: timerState === 'paused' ? `${getStepSummary()} · 일시정지` : getStepSummary(),
+          totalSeconds: recipe.totalTime,
+          remainingSeconds: Math.max(0, recipe.totalTime - seconds),
+          stepLabel: getStepSummary(),
+          isPaused: timerState === 'paused',
+        };
+
+        if (!iosLiveActivityStartedRef.current) {
+          const started = await startIosLiveActivity(payload);
+          if (!cancelled) {
+            iosLiveActivityStartedRef.current = started;
+          }
+        } else {
+          await updateIosLiveActivity(payload);
+        }
+
+        return;
+      }
+
+      if (iosLiveActivityStartedRef.current) {
+        await endIosLiveActivity(
+          isBrewingFinished
+            ? { finalTitle: `${recipe.name} 추출 완료`, finalSubtitle: '브루잉 타이머가 완료되었습니다.' }
+            : { finalTitle: `${recipe.name} 타이머 종료`, finalSubtitle: '타이머가 중지되었습니다.' }
+        );
+
+        if (!cancelled) {
+          iosLiveActivityStartedRef.current = false;
+        }
+      }
+    };
+
+    void syncLiveActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [timerState, isBrewingFinished, recipe, seconds, getStepSummary]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !recipe) return;
+
+    const previousState = previousIosTimerStateRef.current;
+    previousIosTimerStateRef.current = timerState;
+
+    const syncIosNotification = async () => {
+      if (timerState !== 'running' || isBrewingFinished) {
+        await cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
+        iosCompletionNotificationIdRef.current = null;
+        return;
+      }
+
+      if (previousState === 'running') {
+        return;
+      }
+
+      const remainingSeconds = Math.max(0, recipe.totalTime - seconds);
+      if (remainingSeconds <= 0) {
+        return;
+      }
+
+      await cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
+      iosCompletionNotificationIdRef.current = await scheduleIosTimerCompletionNotification(
+        `${recipe.name} 추출 완료`,
+        '브루잉 타이머가 완료되었습니다.',
+        remainingSeconds
+      );
+    };
+
+    void syncIosNotification();
+  }, [timerState, isBrewingFinished, recipe, seconds]);
+
+  useEffect(() => {
+    return () => {
+      void stopAndroidForegroundTimer();
+      void cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
+      iosCompletionNotificationIdRef.current = null;
+      void endIosLiveActivity({ finalTitle: '브루잉 타이머 종료' });
+    };
+  }, []);
+
   if (isLoading) {
     return <ActivityIndicator size="large" style={{ flex: 1 }} />;
   }
@@ -218,6 +498,11 @@ export default function TimerScreen() {
     setCountdown(3);
     setCurrentStepIndex(0);
     setIsBrewingFinished(recipe.steps.length === 0);
+    void stopAndroidForegroundTimer();
+    void cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
+    iosCompletionNotificationIdRef.current = null;
+    void endIosLiveActivity({ finalTitle: `${recipe.name} 타이머 초기화` });
+    iosLiveActivityStartedRef.current = false;
   };
 
   const handleComplete = async () => {
@@ -237,6 +522,14 @@ export default function TimerScreen() {
       }
     }
 
+    await stopAndroidForegroundTimer();
+    await cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
+    iosCompletionNotificationIdRef.current = null;
+    await endIosLiveActivity({
+      finalTitle: `${recipe.name} 추출 완료`,
+      finalSubtitle: '브루잉 타이머가 완료되었습니다.',
+    });
+    iosLiveActivityStartedRef.current = false;
     router.replace('/');
   };
 
@@ -275,7 +568,7 @@ export default function TimerScreen() {
           progressColor={colors.primary}
         />
         <View style={StyleSheet.absoluteFillObject}>
-          <Text style={[styles.timerText, { color: colors.text }]}>{formatTime(seconds)}</Text>
+          <Text style={[styles.timerText, { color: colors.text }]}>{timerState === 'countdown' ? String(countdown) : formatTime(seconds)}</Text>
         </View>
       </View>
       <View style={styles.instructionContainer}>
