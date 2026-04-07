@@ -1,4 +1,4 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+﻿# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # dependencies
 node_modules/
@@ -38,4 +38,28 @@ yarn-error.*
 
 # generated native folders
 /ios
-/android
+/android/*
+
+# Track only the Android native files needed for foreground timer + status chip support
+!/android/app/
+/android/app/*
+!/android/app/src/
+/android/app/src/*
+!/android/app/src/main/
+/android/app/src/main/*
+!/android/app/src/main/AndroidManifest.xml
+
+!/android/app/src/main/java/
+/android/app/src/main/java/*
+!/android/app/src/main/java/com/
+/android/app/src/main/java/com/*
+!/android/app/src/main/java/com/anonymous/
+/android/app/src/main/java/com/anonymous/*
+!/android/app/src/main/java/com/anonymous/dripcoffeetimer/
+/android/app/src/main/java/com/anonymous/dripcoffeetimer/*
+!/android/app/src/main/java/com/anonymous/dripcoffeetimer/MainApplication.kt
+!/android/app/src/main/java/com/anonymous/dripcoffeetimer/timer/
+!/android/app/src/main/java/com/anonymous/dripcoffeetimer/timer/*.kt
+
+
+
