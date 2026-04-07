@@ -3,7 +3,11 @@
 type NativeTimerState = {
   isRunning: boolean;
   isPaused: boolean;
-  remainingMs: number;
+  totalDurationMs: number;
+  totalRemainingMs: number;
+  currentStepRemainingMs: number;
+  currentStepIndex: number;
+  totalSteps: number;
   endElapsedRealtimeMs: number;
   title: string;
   subtitle: string;
@@ -11,9 +15,18 @@ type NativeTimerState = {
   canPostPromoted: boolean;
 };
 
+type AndroidForegroundTimerOptions = {
+  totalDurationMs: number;
+  totalRemainingMs: number;
+  stepEndTimesMs: number[];
+  currentStepIndex: number;
+  title?: string;
+  subtitle?: string;
+};
+
 type NativeTimerForegroundModule = {
-  startTimer(options: { remainingMs: number; title?: string; subtitle?: string }): Promise<boolean>;
-  updateTimer(options: { title?: string; subtitle?: string }): Promise<boolean>;
+  startTimer(options: AndroidForegroundTimerOptions): Promise<boolean>;
+  updateTimer(options: Partial<AndroidForegroundTimerOptions>): Promise<boolean>;
   pauseTimer(): Promise<boolean>;
   stopTimer(): Promise<boolean>;
   getState(): Promise<NativeTimerState>;
@@ -48,14 +61,14 @@ export async function ensureAndroidTimerNotificationPermission(): Promise<boolea
   return true;
 }
 
-export async function startAndroidForegroundTimer(remainingMs: number, title?: string, subtitle?: string): Promise<void> {
+export async function startAndroidForegroundTimer(options: AndroidForegroundTimerOptions): Promise<void> {
   if (!isAvailable() || !timerModule) return;
-  await timerModule.startTimer({ remainingMs, title, subtitle });
+  await timerModule.startTimer(options);
 }
 
-export async function updateAndroidForegroundTimer(title?: string, subtitle?: string): Promise<void> {
+export async function updateAndroidForegroundTimer(options: Partial<AndroidForegroundTimerOptions>): Promise<void> {
   if (!isAvailable() || !timerModule) return;
-  await timerModule.updateTimer({ title, subtitle });
+  await timerModule.updateTimer(options);
 }
 
 export async function pauseAndroidForegroundTimer(): Promise<void> {

@@ -6,13 +6,13 @@ import { Audio } from 'expo-av';
 import { addLog } from '../../db';
 import CircularProgress from '@/components/CircularProgress';
 import { useTheme } from '@/context/ThemeContext';
+import { deriveTimerState } from '@/utils/deriveTimerState';
 import {
   ensureAndroidTimerNotificationPermission,
   getAndroidForegroundTimerState,
   pauseAndroidForegroundTimer,
   startAndroidForegroundTimer,
   stopAndroidForegroundTimer,
-  updateAndroidForegroundTimer,
 } from '@/utils/androidTimerService';
 import {
   cancelIosTimerNotification,
@@ -31,18 +31,6 @@ const formatTime = (seconds: number) => {
   return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
 };
 
-const getStepIndexFromElapsed = (stepEndTimes: number[], elapsedSeconds: number): number => {
-  if (stepEndTimes.length === 0) return 0;
-
-  for (let i = 0; i < stepEndTimes.length; i += 1) {
-    if (elapsedSeconds < stepEndTimes[i]) {
-      return i;
-    }
-  }
-
-  return stepEndTimes.length - 1;
-};
-
 type TimerState = 'idle' | 'countdown' | 'running' | 'paused';
 
 export default function TimerScreen() {
@@ -58,8 +46,6 @@ export default function TimerScreen() {
   const [timerState, setTimerState] = useState<TimerState>('idle');
   const [seconds, setSeconds] = useState(0);
   const [countdown, setCountdown] = useState(3);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [isBrewingFinished, setIsBrewingFinished] = useState(false);
 
   const sound = useRef(new Audio.Sound());
   const appState = useRef<AppStateStatus>(AppState.currentState);
@@ -95,9 +81,6 @@ export default function TimerScreen() {
       if (data) {
         setRecipe(data);
         setIsMissing(false);
-        if (data.steps.length === 0) {
-          setIsBrewingFinished(true);
-        }
       } else {
         setRecipe(null);
         setIsMissing(true);
@@ -112,15 +95,10 @@ export default function TimerScreen() {
     };
   }, [hasValidId, recipeId]);
 
-  const stepEndTimes = useMemo(() => {
-    if (!recipe) return [];
-
-    let cumulativeTime = 0;
-    return recipe.steps.map((step) => {
-      cumulativeTime += step.duration;
-      return cumulativeTime;
-    });
-  }, [recipe]);
+  const derivedTimerState = useMemo(
+    () => deriveTimerState(recipe?.steps ?? [], seconds, recipe?.totalTime),
+    [recipe, seconds]
+  );
 
   const applyElapsedSeconds = useCallback(
     (elapsedSeconds: number) => {
@@ -128,50 +106,35 @@ export default function TimerScreen() {
 
       const clampedSeconds = Math.max(0, Math.min(recipe.totalTime, elapsedSeconds));
       setSeconds(clampedSeconds);
-      setCurrentStepIndex(getStepIndexFromElapsed(stepEndTimes, clampedSeconds));
-      setIsBrewingFinished(clampedSeconds >= recipe.totalTime || recipe.steps.length === 0);
     },
-    [recipe, stepEndTimes]
+    [recipe]
   );
 
   const totalWaterPoured = useMemo(() => {
     if (!recipe) return 0;
-    if (isBrewingFinished) {
+    if (derivedTimerState.isFinished) {
       return recipe.totalWater;
     }
 
-    return recipe.steps.slice(0, currentStepIndex + 1).reduce((acc, step) => acc + step.waterAmount, 0);
-  }, [recipe, currentStepIndex, isBrewingFinished]);
+    return recipe.steps
+      .slice(0, derivedTimerState.currentStepIndex + 1)
+      .reduce((acc, step) => acc + step.waterAmount, 0);
+  }, [recipe, derivedTimerState.currentStepIndex, derivedTimerState.isFinished]);
 
   const currentStepProgress = useMemo(() => {
     if (!recipe) return 0;
+    if (derivedTimerState.currentStepDurationSec <= 0) return 1;
 
-    const previousStepsDuration = recipe.steps
-      .slice(0, currentStepIndex)
-      .reduce((acc, step) => acc + step.duration, 0);
-
-    const currentStep = recipe.steps[currentStepIndex];
-    if (!currentStep) return 1;
-
-    const elapsedInStep = seconds - previousStepsDuration;
-    if (currentStep.duration === 0) return 1;
-
-    return Math.min(elapsedInStep / currentStep.duration, 1);
-  }, [seconds, currentStepIndex, recipe]);
-
-  const getStepSummary = useCallback(() => {
-    if (!recipe) return '';
-
-    const totalSteps = Math.max(recipe.steps.length, 1);
-    const stepNumber = Math.min(currentStepIndex + 1, totalSteps);
-    return `단계 ${stepNumber}/${totalSteps}`;
-  }, [recipe, currentStepIndex]);
+    return Math.min(
+      derivedTimerState.currentStepElapsedSec / derivedTimerState.currentStepDurationSec,
+      1
+    );
+  }, [recipe, derivedTimerState.currentStepDurationSec, derivedTimerState.currentStepElapsedSec]);
 
   const getForegroundSubtitle = useCallback(() => {
     if (!recipe) return '';
-    if (isBrewingFinished) return '추출 완료';
-    return getStepSummary();
-  }, [recipe, isBrewingFinished, getStepSummary]);
+    return '';
+  }, [recipe]);
 
   const syncFromForegroundTimer = useCallback(async () => {
     if (!recipe || Platform.OS !== 'android') return;
@@ -181,7 +144,7 @@ export default function TimerScreen() {
       if (!state) return;
       if (!state.isRunning && !state.isPaused) return;
 
-      const remainingSeconds = Math.ceil(Math.max(0, state.remainingMs) / 1000);
+      const remainingSeconds = Math.ceil(Math.max(0, state.totalRemainingMs) / 1000);
       const elapsedSeconds = Math.max(0, Math.min(recipe.totalTime, recipe.totalTime - remainingSeconds));
       applyElapsedSeconds(elapsedSeconds);
 
@@ -285,37 +248,28 @@ export default function TimerScreen() {
   }, [timerState]);
 
   useEffect(() => {
-    if (timerState !== 'running') return;
+    if (timerState !== 'running' || !recipe) return;
 
     const interval = setInterval(() => {
-      setSeconds((prev) => prev + 1);
+      setSeconds((prev) => Math.min(prev + 1, recipe.totalTime));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [timerState]);
+  }, [timerState, recipe]);
 
   useEffect(() => {
-    if (timerState !== 'running' || !recipe || isBrewingFinished) return;
+    if (timerState !== 'running' || !recipe || derivedTimerState.isFinished) return;
 
-    const currentStepEndTime = stepEndTimes[currentStepIndex];
+    const currentStepEndTime = derivedTimerState.currentStepEndSec;
     if (currentStepEndTime === undefined) {
-      setIsBrewingFinished(true);
       return;
-    }
-
-    if (seconds >= currentStepEndTime) {
-      if (currentStepIndex < recipe.steps.length - 1) {
-        setCurrentStepIndex((prev) => prev + 1);
-      } else {
-        setIsBrewingFinished(true);
-      }
     }
 
     const timeUntilNextStep = currentStepEndTime - seconds;
     if (timeUntilNextStep === 3) {
       sound.current.replayAsync().catch((e) => console.log(e));
     }
-  }, [timerState, recipe, isBrewingFinished, currentStepIndex, stepEndTimes, seconds]);
+  }, [timerState, recipe, derivedTimerState.isFinished, derivedTimerState.currentStepEndSec, seconds]);
 
   useEffect(() => {
     if (!recipe || Platform.OS !== 'android') return;
@@ -331,10 +285,19 @@ export default function TimerScreen() {
           const granted = await ensureAndroidTimerNotificationPermission();
           if (!granted) return;
 
-          const remainingMs = Math.max(0, (recipe.totalTime - seconds) * 1000);
-          if (remainingMs <= 0) return;
+          if (derivedTimerState.totalRemainingSec <= 0 || derivedTimerState.isFinished) {
+            await stopAndroidForegroundTimer();
+            return;
+          }
 
-          await startAndroidForegroundTimer(remainingMs, recipe.name, getForegroundSubtitle());
+          await startAndroidForegroundTimer({
+            totalDurationMs: recipe.totalTime * 1000,
+            totalRemainingMs: derivedTimerState.totalRemainingSec * 1000,
+            stepEndTimesMs: derivedTimerState.stepEndTimes.map((time) => time * 1000),
+            currentStepIndex: derivedTimerState.currentStepIndex,
+            title: recipe.name,
+            subtitle: getForegroundSubtitle(),
+          });
           return;
         }
 
@@ -352,18 +315,25 @@ export default function TimerScreen() {
     };
 
     void syncBackgroundService();
-  }, [timerState, recipe, seconds, getForegroundSubtitle]);
+  }, [timerState, recipe, derivedTimerState, getForegroundSubtitle]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || !recipe || timerState !== 'running') return;
+    if (Platform.OS !== 'android' || timerState !== 'running' || !derivedTimerState.isFinished) return;
 
-    void updateAndroidForegroundTimer(recipe.name, getForegroundSubtitle());
-  }, [timerState, recipe, currentStepIndex, isBrewingFinished, getForegroundSubtitle]);
+    void stopAndroidForegroundTimer();
+  }, [timerState, derivedTimerState.isFinished]);
 
   useEffect(() => {
     if (Platform.OS !== 'ios' || !recipe) return;
 
     let cancelled = false;
+    const stepLabels = recipe.steps.map((step, index) => {
+      if (step.instruction.trim().length > 0) {
+        return step.instruction;
+      }
+
+      return `단계 ${index + 1}`;
+    });
 
     const syncLiveActivity = async () => {
       if (iosLiveActivitySupportedRef.current === null) {
@@ -374,14 +344,15 @@ export default function TimerScreen() {
         return;
       }
 
-      const shouldKeepLiveActivity = (timerState === 'running' || timerState === 'paused') && !isBrewingFinished;
+      const shouldKeepLiveActivity =
+        (timerState === 'running' || timerState === 'paused') && !derivedTimerState.isFinished;
       if (shouldKeepLiveActivity) {
         const payload = {
           title: recipe.name,
-          subtitle: timerState === 'paused' ? `${getStepSummary()} · 일시정지` : getStepSummary(),
+          stepLabels,
+          stepEndTimes: derivedTimerState.stepEndTimes,
           totalSeconds: recipe.totalTime,
-          remainingSeconds: Math.max(0, recipe.totalTime - seconds),
-          stepLabel: getStepSummary(),
+          elapsedSeconds: derivedTimerState.totalElapsedSec,
           isPaused: timerState === 'paused',
         };
 
@@ -399,7 +370,7 @@ export default function TimerScreen() {
 
       if (iosLiveActivityStartedRef.current) {
         await endIosLiveActivity(
-          isBrewingFinished
+          derivedTimerState.isFinished
             ? { finalTitle: `${recipe.name} 추출 완료`, finalSubtitle: '브루잉 타이머가 완료되었습니다.' }
             : { finalTitle: `${recipe.name} 타이머 종료`, finalSubtitle: '타이머가 중지되었습니다.' }
         );
@@ -415,7 +386,7 @@ export default function TimerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [timerState, isBrewingFinished, recipe, seconds, getStepSummary]);
+  }, [timerState, derivedTimerState.isFinished, recipe]);
 
   useEffect(() => {
     if (Platform.OS !== 'ios' || !recipe) return;
@@ -424,7 +395,7 @@ export default function TimerScreen() {
     previousIosTimerStateRef.current = timerState;
 
     const syncIosNotification = async () => {
-      if (timerState !== 'running' || isBrewingFinished) {
+      if (timerState !== 'running' || derivedTimerState.isFinished) {
         await cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
         iosCompletionNotificationIdRef.current = null;
         return;
@@ -434,7 +405,7 @@ export default function TimerScreen() {
         return;
       }
 
-      const remainingSeconds = Math.max(0, recipe.totalTime - seconds);
+      const remainingSeconds = Math.max(0, derivedTimerState.totalRemainingSec);
       if (remainingSeconds <= 0) {
         return;
       }
@@ -448,7 +419,7 @@ export default function TimerScreen() {
     };
 
     void syncIosNotification();
-  }, [timerState, isBrewingFinished, recipe, seconds]);
+  }, [timerState, derivedTimerState.isFinished, derivedTimerState.totalRemainingSec, recipe]);
 
   useEffect(() => {
     return () => {
@@ -483,6 +454,10 @@ export default function TimerScreen() {
   }
 
   const handleMainButtonPress = () => {
+    if (derivedTimerState.isFinished) {
+      return;
+    }
+
     if (timerState === 'idle') {
       setTimerState('countdown');
     } else if (timerState === 'running') {
@@ -496,8 +471,6 @@ export default function TimerScreen() {
     setTimerState('idle');
     setSeconds(0);
     setCountdown(3);
-    setCurrentStepIndex(0);
-    setIsBrewingFinished(recipe.steps.length === 0);
     void stopAndroidForegroundTimer();
     void cancelIosTimerNotification(iosCompletionNotificationIdRef.current);
     iosCompletionNotificationIdRef.current = null;
@@ -534,6 +507,10 @@ export default function TimerScreen() {
   };
 
   const getButtonText = () => {
+    if (derivedTimerState.isFinished) {
+      return '완료';
+    }
+
     switch (timerState) {
       case 'idle':
         return '시작';
@@ -546,7 +523,7 @@ export default function TimerScreen() {
     }
   };
 
-  const currentStep: RecipeStep | undefined = recipe.steps[currentStepIndex];
+  const currentStep: RecipeStep | undefined = recipe.steps[derivedTimerState.currentStepIndex];
   const currentStepWaterAmount = currentStep?.waterAmount ?? 0;
 
   return (
@@ -568,22 +545,32 @@ export default function TimerScreen() {
           progressColor={colors.primary}
         />
         <View style={StyleSheet.absoluteFillObject}>
-          <Text style={[styles.timerText, { color: colors.text }]}>{timerState === 'countdown' ? String(countdown) : formatTime(seconds)}</Text>
+          <Text style={[styles.timerText, { color: colors.text }]}>
+            {timerState === 'countdown'
+              ? String(countdown)
+              : formatTime(derivedTimerState.currentStepRemainingSec)}
+          </Text>
         </View>
       </View>
       <View style={styles.instructionContainer}>
-        <Text style={[styles.stepTitle, { color: colors.text }]}>{isBrewingFinished ? '추출 완료' : (currentStep?.instruction || '브루잉 완료!')}</Text>
-        <Text style={[styles.stepDetail, { color: colors.subtext }]}>{isBrewingFinished ? `총 사용량: ${totalWaterPoured}g` : `이번 단계: ${currentStepWaterAmount}g / 총 ${totalWaterPoured}g`}</Text>
+        <Text style={[styles.stepTitle, { color: colors.text }]}>
+          {derivedTimerState.isFinished ? '추출 완료' : currentStep?.instruction || '브루잉 완료!'}
+        </Text>
+        <Text style={[styles.stepDetail, { color: colors.subtext }]}>
+          {derivedTimerState.isFinished
+            ? `총 사용량: ${totalWaterPoured}g`
+            : `이번 단계: ${currentStepWaterAmount}g / 총 ${totalWaterPoured}g`}
+        </Text>
       </View>
       <View style={styles.buttonContainer}>
         <Pressable
           style={[styles.button, { backgroundColor: colors.primary }]}
           onPress={handleMainButtonPress}
-          disabled={timerState === 'countdown'}
+          disabled={timerState === 'countdown' || derivedTimerState.isFinished}
         >
           <Text style={styles.buttonText}>{getButtonText()}</Text>
         </Pressable>
-        {isBrewingFinished ? (
+        {derivedTimerState.isFinished ? (
           <Pressable style={[styles.button, styles.completeButton]} onPress={handleComplete}>
             <Text style={styles.buttonText}> 완료 </Text>
           </Pressable>

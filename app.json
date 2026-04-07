@@ -35,8 +35,7 @@
       "expo-router",
       "expo-sqlite",
       "expo-notifications",
-      "./plugins/with-ios-live-activity",
-      "expo-live-activity"
+      "./plugins/with-ios-live-activity"
     ],
     "experiments": {
       "typedRoutes": true
